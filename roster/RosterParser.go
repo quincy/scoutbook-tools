@@ -1,4 +1,4 @@
-package parser
+package roster
 
 import (
 	"encoding/csv"
@@ -29,6 +29,8 @@ func NewCsvParser() Parser {
 
 func (p *csvParser) ParseAdultRoster(input *os.File) ([]AdultScoutbookUser, error) {
 	r := csv.NewReader(input)
+	r.LazyQuotes = true    // Allow quotes to appear in unquoted fields
+	r.FieldsPerRecord = -1 // Allow records with varying numbers of fields
 	records, err := r.ReadAll()
 	if err != nil {
 		return nil, err
@@ -62,6 +64,8 @@ func (p *csvParser) ParseAdultRoster(input *os.File) ([]AdultScoutbookUser, erro
 
 func (p *csvParser) ParseYouthRoster(input *os.File) ([]YouthScoutbookUser, error) {
 	r := csv.NewReader(input)
+	r.LazyQuotes = true    // Allow quotes to appear in unquoted fields
+	r.FieldsPerRecord = -1 // Allow records with varying numbers of fields
 	records, err := r.ReadAll()
 	if err != nil {
 		return nil, err

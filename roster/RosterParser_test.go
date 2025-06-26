@@ -1,4 +1,4 @@
-package parser
+package roster
 
 import (
 	"errors"
@@ -39,22 +39,22 @@ func Test_RosterParserFailsOnEmptyAdultFile(t *testing.T) {
 }
 
 func Test_RosterParserCanParseAdultRoster(t *testing.T) {
-	// Given the input file `adult-roster-example.csv`
-	csv, err := os.Open("test_resources/adult-roster-example.csv")
-	if err != nil {
-		t.Fatalf("Failed to open roster file: %v", err)
+	// Define test cases for different CSV file versions
+	testCases := []struct {
+		name     string
+		filePath string
+	}{
+		{
+			name:     "Original CSV format",
+			filePath: "test_resources/adult-roster-example.csv",
+		},
+		{
+			name:     "v20250626 CSV format",
+			filePath: "test_resources/adult-roster-example-v20250626.csv",
+		},
 	}
-	defer func(tmpFile *os.File) {
-		_ = tmpFile.Close()
-	}(csv)
 
-	// When I try to parse the input file
-	actualUsers, err := NewCsvParser().ParseAdultRoster(csv)
-	if err != nil {
-		t.Fatalf("Failed to parse roster file: %v", err)
-	}
-
-	// Then the RosterParser returns the expected users
+	// Expected users should be the same for both file formats
 	expectedUsers := []AdultScoutbookUser{
 		{FirstName: "Alice", LastName: "Ames", Email: "aames@example.com", Gender: "F", BsaId: 1, UnitNumber: "Troop 77 B", Training: "Y01 Youth Protection Training Certification", TrainingExpiration: "03/03/2027", HealthForms: "05/06/2025(AB) | 05/06/2025 (C)", SwimClass: "", SwimClassExpiration: "", Positions: "Committee Member"},
 		{FirstName: "Bob", LastName: "Brown", Email: "bbrown@example.com", Gender: "M", BsaId: 2, UnitNumber: "Troop 77 B", Training: "Y01 Youth Protection Training Certification  | SCO_800 Hazardous Weather Training", TrainingExpiration: "03/03/2027 | 06/07/2025", HealthForms: "05/06/2023(AB) (Expired) | 05/06/2025 (C)", SwimClass: "", SwimClassExpiration: "", Positions: "Assistant Scoutmaster"},
@@ -71,57 +71,101 @@ func Test_RosterParserCanParseAdultRoster(t *testing.T) {
 		{FirstName: "Mary", LastName: "Mumford", Email: "mmumford@example.com", Gender: "F", BsaId: 13, UnitNumber: "Troop 77 B", Training: "Y01 Youth Protection Training Certification", TrainingExpiration: "02/21/2026", HealthForms: "", SwimClass: "", SwimClassExpiration: "", Positions: "Committee Membership Coordinator | New Member Coordinator"},
 	}
 
-	if !AdultScoutbookUsers(actualUsers).ContainsExactly(expectedUsers) {
-		t.Fatalf("Expected users to be\n    %v\ngot %v", expectedUsers, actualUsers)
+	// Run test for each test case
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Given the input file
+			csv, err := os.Open(tc.filePath)
+			if err != nil {
+				t.Fatalf("Failed to open roster file: %v", err)
+			}
+			defer func(tmpFile *os.File) {
+				_ = tmpFile.Close()
+			}(csv)
+
+			// When I try to parse the input file
+			actualUsers, err := NewCsvParser().ParseAdultRoster(csv)
+			if err != nil {
+				t.Fatalf("Failed to parse roster file: %v", err)
+			}
+
+			// Then the RosterParser returns the expected users
+			if !AdultScoutbookUsers(actualUsers).ContainsExactly(expectedUsers) {
+				t.Fatalf("Expected users to be\n    %v\ngot %v", expectedUsers, actualUsers)
+			}
+		})
 	}
 }
 
 func Test_RosterParserFailsOnEmptyYouthFile(t *testing.T) {
-	// Given the input file is empty
-	emptyFile, err := os.CreateTemp("", "empty.csv")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer func(name string) {
-		err := os.Remove(name)
-		if err != nil {
-			t.Fatalf("Failed to remove temp file: %v", err)
-		}
-	}(emptyFile.Name())
-	defer func(tmpFile *os.File) {
-		_ = tmpFile.Close()
-	}(emptyFile)
-
-	// When I try to parse the input file
-	_, err = NewCsvParser().ParseYouthRoster(emptyFile)
-
-	// Then the RosterParser returns an error
-	if err == nil {
-		t.Fatalf("Expected an error")
+	// Define test cases for different parser functions
+	testCases := []struct {
+		name      string
+		parseFunc func(parser Parser, file *os.File) (interface{}, error)
+	}{
+		{
+			name: "ParseYouthRoster",
+			parseFunc: func(parser Parser, file *os.File) (interface{}, error) {
+				return parser.ParseYouthRoster(file)
+			},
+		},
+		{
+			name: "ParseAdultRoster",
+			parseFunc: func(parser Parser, file *os.File) (interface{}, error) {
+				return parser.ParseAdultRoster(file)
+			},
+		},
 	}
 
-	if !errors.Is(err, EmptyRosterError) {
-		t.Fatalf("Expected error to be EmptyRosterError got: %T -> %v", err, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Given the input file is empty
+			emptyFile, err := os.CreateTemp("", "empty.csv")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer func(name string) {
+				err := os.Remove(name)
+				if err != nil {
+					t.Fatalf("Failed to remove temp file: %v", err)
+				}
+			}(emptyFile.Name())
+			defer func(tmpFile *os.File) {
+				_ = tmpFile.Close()
+			}(emptyFile)
+
+			// When I try to parse the input file
+			_, err = tc.parseFunc(NewCsvParser(), emptyFile)
+
+			// Then the RosterParser returns an error
+			if err == nil {
+				t.Fatalf("Expected an error")
+			}
+
+			if !errors.Is(err, EmptyRosterError) {
+				t.Fatalf("Expected error to be EmptyRosterError got: %T -> %v", err, err)
+			}
+		})
 	}
 }
 
 func Test_RosterParserCanParseYouthRoster(t *testing.T) {
-	// Given the input file `adult-roster-example.csv`
-	csv, err := os.Open("test_resources/youth-roster-example.csv")
-	if err != nil {
-		t.Fatalf("Failed to open roster file: %v", err)
+	// Define test cases for different CSV file versions
+	testCases := []struct {
+		name     string
+		filePath string
+	}{
+		{
+			name:     "Original CSV format",
+			filePath: "test_resources/youth-roster-example.csv",
+		},
+		{
+			name:     "v20250626 CSV format",
+			filePath: "test_resources/youth-roster-example-v20250626.csv",
+		},
 	}
-	defer func(tmpFile *os.File) {
-		_ = tmpFile.Close()
-	}(csv)
 
-	// When I try to parse the input file
-	actualUsers, err := NewCsvParser().ParseYouthRoster(csv)
-	if err != nil {
-		t.Fatalf("Failed to parse roster file: %v", err)
-	}
-
-	// Then the RosterParser returns the expected users
+	// Expected users should be the same for both file formats
 	expectedUsers := []YouthScoutbookUser{
 		{FirstName: "Abe", LastName: "Ames", BsaId: 100, Email: "", DateOfBirth: "07/04/2014", Age: 10, Gender: "M", HealthForms: "06/19/2026(AB) | 06/08/2026(C)", SwimClass: "", SwimClassExpiration: "", Positions: "Patrol Leader [ Vikings] Patrol | Scouts BSA [ Vikings] Patrol", Patrol: "Vikings", Training: "", TrainingExpiration: ""},
 		{FirstName: "Billy", LastName: "Brown", BsaId: 101, Email: "", DateOfBirth: "08/01/2007", Age: 17, Gender: "M", HealthForms: "06/19/2026(AB) (Expired) | 06/08/2022(C)", SwimClass: "Swimmer", SwimClassExpiration: "05/28/2019", Positions: "Scouts BSA [ Dreadnoughts] Patrol", Patrol: "Dreadnoughts", Training: "", TrainingExpiration: ""},
@@ -130,8 +174,29 @@ func Test_RosterParserCanParseYouthRoster(t *testing.T) {
 		{FirstName: "Ed", LastName: "Eckhart", BsaId: 104, Email: "", DateOfBirth: "12/16/2009", Age: 17, Gender: "M", HealthForms: "", SwimClass: "", SwimClassExpiration: "", Positions: "", Patrol: "", Training: "", TrainingExpiration: ""},
 	}
 
-	if !YouthScoutbookUsers(actualUsers).ContainsExactly(expectedUsers) {
-		t.Fatalf("Expected users to be\n    %v\ngot %v", expectedUsers, actualUsers)
+	// Run test for each test case
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Given the input file
+			csv, err := os.Open(tc.filePath)
+			if err != nil {
+				t.Fatalf("Failed to open roster file: %v", err)
+			}
+			defer func(tmpFile *os.File) {
+				_ = tmpFile.Close()
+			}(csv)
+
+			// When I try to parse the input file
+			actualUsers, err := NewCsvParser().ParseYouthRoster(csv)
+			if err != nil {
+				t.Fatalf("Failed to parse roster file: %v", err)
+			}
+
+			// Then the RosterParser returns the expected users
+			if !YouthScoutbookUsers(actualUsers).ContainsExactly(expectedUsers) {
+				t.Fatalf("Expected users to be\n    %v\ngot %v", expectedUsers, actualUsers)
+			}
+		})
 	}
 }
 
